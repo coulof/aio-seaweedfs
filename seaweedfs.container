@@ -1,0 +1,52 @@
+[Unit]
+Description=SeaweedFS all-in-one server (S3, Master, Volume, Filer, Admin UI)
+Documentation=https://github.com/seaweedfs/seaweedfs/wiki
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=docker.io/chrislusf/seaweedfs:latest
+ContainerName=seaweedfs
+AutoUpdate=registry
+
+# Data persistence — bind mount so the disk location is explicit
+Volume=/srv/seaweedfs/data:/data:Z
+Volume=/srv/seaweedfs/entrypoint.sh:/entrypoint.sh:Z,ro
+
+# Ports
+#   8333  S3 API
+#   9333  Master UI
+#   9340  Volume server (gRPC/HTTP)
+#   8888  Filer UI
+#   7333  WebDAV
+#  23646  Admin UI
+PublishPort=8333:8333
+PublishPort=9333:9333
+PublishPort=9340:9340
+PublishPort=8888:8888
+PublishPort=7333:7333
+PublishPort=23646:23646
+
+# Credentials injected as env vars from Podman secrets (not plaintext in this file)
+Secret=seaweedfs-admin-user,type=env,target=WEED_ADMIN_USER
+Secret=seaweedfs-admin-pass,type=env,target=WEED_ADMIN_PASS
+Secret=seaweedfs-s3-key,type=env,target=AWS_ACCESS_KEY_ID
+Secret=seaweedfs-s3-secret,type=env,target=AWS_SECRET_ACCESS_KEY
+
+Environment=S3_BUCKET=my-bucket
+
+# Health check hits the master's cluster status endpoint
+HealthCmd=curl -f http://localhost:9333/cluster/status || exit 1
+HealthInterval=30s
+HealthRetries=3
+HealthStartPeriod=20s
+
+Exec=/entrypoint.sh
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target
