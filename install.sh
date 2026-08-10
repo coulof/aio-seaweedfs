@@ -1,10 +1,10 @@
 #!/bin/bash
-# install.sh — sets up SeaweedFS as a root-level, boot-persistent Podman quadlet service
+# install.sh — sets up SeaweedFS as a boot-persistent systemd service via Podman
 #
 # Usage: sudo ./install.sh
 #
-# Idempotent: safe to re-run. Existing secrets are left untouched (use
-# `sudo ./rotate-credentials.sh` if you want to rotate them).
+# Supports both Podman Quadlet (Podman >= 4.4.0) and standard systemd unit file (Podman 3.x / < 4.4.0).
+# Idempotent: safe to re-run. Existing secrets are left untouched.
 
 set -euo pipefail
 
@@ -35,19 +35,21 @@ for path in /usr/libexec/podman/quadlet /usr/lib/podman/quadlet /usr/lib/systemd
   fi
 done
 
-if [[ -z "${QUADLET_BIN}" ]]; then
-  PODMAN_VER="$(podman --version 2>/dev/null || echo 'unknown')"
-  echo "Warning: Quadlet generator binary not found at standard system paths." >&2
-  echo "Installed Podman version: ${PODMAN_VER}" >&2
-  echo "Podman Quadlet requires Podman >= 4.4.0." >&2
+PODMAN_VER="$(podman --version 2>/dev/null || echo 'unknown')"
+USE_QUADLET=false
+
+if [[ -n "${QUADLET_BIN}" ]]; then
+  USE_QUADLET=true
+  echo "    - Found Quadlet generator (${QUADLET_BIN}). Using Quadlet mode."
 else
-  echo "    - Found Quadlet generator at ${QUADLET_BIN}"
+  echo "    - Quadlet not detected (${PODMAN_VER}). Falling back to standard systemd unit file mode."
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="/srv/seaweedfs/data"
 ENTRYPOINT_DEST="/srv/seaweedfs/entrypoint.sh"
 QUADLET_DIR="/etc/containers/systemd"
+SYSTEMD_DIR="/etc/systemd/system"
 
 echo "==> Creating data directory: ${DATA_DIR}"
 mkdir -p "${DATA_DIR}"
@@ -59,7 +61,7 @@ install -m 0755 "${SCRIPT_DIR}/entrypoint.sh" "${ENTRYPOINT_DEST}"
 echo "==> Creating Podman secrets (skipped if they already exist)"
 create_secret_if_missing() {
   local name="$1" value="$2"
-  if podman secret inspect "${name}" >/dev/null 2>&1; then
+  if podman secret inspect "${name}" >/dev/null 2>&1 || podman secret exists "${name}" 2>/dev/null; then
     echo "    - ${name} already exists, leaving as-is"
   else
     echo -n "${value}" | podman secret create "${name}" -
@@ -72,20 +74,28 @@ create_secret_if_missing "seaweedfs-admin-pass" "$(openssl rand -base64 24)"
 create_secret_if_missing "seaweedfs-s3-key" "admin"
 create_secret_if_missing "seaweedfs-s3-secret" "$(openssl rand -base64 32)"
 
-echo "==> Installing quadlet unit to ${QUADLET_DIR}"
-mkdir -p "${QUADLET_DIR}"
-install -m 0644 "${SCRIPT_DIR}/seaweedfs.container" "${QUADLET_DIR}/seaweedfs.container"
+if [[ "${USE_QUADLET}" == "true" ]]; then
+  echo "==> Installing quadlet unit to ${QUADLET_DIR}"
+  mkdir -p "${QUADLET_DIR}"
+  install -m 0644 "${SCRIPT_DIR}/seaweedfs.container" "${QUADLET_DIR}/seaweedfs.container"
 
-echo "==> Reloading systemd and starting seaweedfs.service"
-systemctl daemon-reload
+  echo "==> Reloading systemd and starting seaweedfs.service"
+  systemctl daemon-reload
 
-if ! systemctl list-unit-files seaweedfs.service >/dev/null 2>&1 && ! systemctl status seaweedfs.service >/dev/null 2>&1; then
-  echo "Error: systemd generator failed to create 'seaweedfs.service' from '${QUADLET_DIR}/seaweedfs.container'." >&2
-  echo "Ensure Podman Quadlet is supported on this host (Podman >= 4.4.0)." >&2
-  exit 1
+  if ! systemctl list-unit-files seaweedfs.service >/dev/null 2>&1 && ! systemctl status seaweedfs.service >/dev/null 2>&1; then
+    echo "Error: systemd generator failed to create 'seaweedfs.service' from '${QUADLET_DIR}/seaweedfs.container'." >&2
+    exit 1
+  fi
+
+  systemctl restart seaweedfs.service
+else
+  echo "==> Installing standard systemd unit to ${SYSTEMD_DIR}"
+  install -m 0644 "${SCRIPT_DIR}/seaweedfs.service" "${SYSTEMD_DIR}/seaweedfs.service"
+
+  echo "==> Reloading systemd and enabling seaweedfs.service"
+  systemctl daemon-reload
+  systemctl enable --now seaweedfs.service
 fi
-
-systemctl restart seaweedfs.service
 
 echo ""
 echo "==> Done. Service status:"

@@ -8,10 +8,11 @@ ports are published directly to the host.
 
 | File                   | Purpose                                                        |
 |------------------------|------------------------------------------------------------------|
-| `seaweedfs.container`  | Podman quadlet unit — defines the container, volumes, ports, secrets |
+| `seaweedfs.container`  | Podman Quadlet unit (used on Podman >= 4.4.0)                   |
+| `seaweedfs.service`    | Standard systemd unit file (fallback for Podman < 4.4.0 / 3.x)   |
 | `entrypoint.sh`        | Wires the injected secret env vars into `weed` CLI flags        |
-| `install.sh`           | Idempotent setup script: dirs, secrets, quadlet install, enable |
-| `uninstall.sh`         | Cleanup script: stops service, removes quadlet, secrets & files |
+| `install.sh`           | Idempotent setup script: auto-detects Quadlet vs systemd unit   |
+| `uninstall.sh`         | Cleanup script: stops service, removes unit files, secrets & data|
 | `rotate-credentials.sh`| Credential rotation script: regenerates secrets and restarts unit|
 
 ## Quick start
@@ -27,8 +28,10 @@ That's it — `install.sh` will:
 2. Install `entrypoint.sh` to `/srv/seaweedfs/entrypoint.sh`
 3. Generate Podman secrets for admin UI and S3 credentials (random passwords,
    skipped if they already exist — safe to re-run)
-4. Install the quadlet unit to `/etc/containers/systemd/seaweedfs.container`
-5. `systemctl daemon-reload` + `restart seaweedfs.service`
+4. Detect Podman capability:
+   - On Podman >= 4.4.0: installs Quadlet unit `/etc/containers/systemd/seaweedfs.container`
+   - On Podman < 4.4.0 (e.g. Podman 3.4.4): installs standard systemd unit `/etc/systemd/system/seaweedfs.service`
+5. `systemctl daemon-reload` + enables/restarts `seaweedfs.service`
 
 ## Ports
 

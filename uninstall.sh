@@ -1,9 +1,9 @@
 #!/bin/bash
-# uninstall.sh — uninstalls SeaweedFS Podman quadlet service
+# uninstall.sh — uninstalls SeaweedFS Podman service
 #
 # Usage: sudo ./uninstall.sh [--purge] [-y|--yes]
 #
-# Removes systemd service, quadlet file, Podman secrets, and entrypoint script.
+# Removes systemd service, unit files, Podman secrets, and entrypoint script.
 # Retains data in /srv/seaweedfs/data unless --purge is passed.
 
 set -euo pipefail
@@ -28,6 +28,7 @@ for arg in "$@"; do
 done
 
 QUADLET_FILE="/etc/containers/systemd/seaweedfs.container"
+SYSTEMD_FILE="/etc/systemd/system/seaweedfs.service"
 ENTRYPOINT_FILE="/srv/seaweedfs/entrypoint.sh"
 DATA_DIR="/srv/seaweedfs/data"
 SRV_DIR="/srv/seaweedfs"
@@ -62,7 +63,7 @@ else
   echo "========================================================================="
   echo "                           WARNING"
   echo "========================================================================="
-  echo " You are about to uninstall the SeaweedFS systemd Quadlet service."
+  echo " You are about to uninstall the SeaweedFS systemd service."
   echo " This will stop the service and delete Podman secrets and unit files."
   echo ""
   echo " Note: Data in ${DATA_DIR} WILL BE PRESERVED."
@@ -79,13 +80,17 @@ else
 fi
 
 echo ""
-echo "==> Stopping seaweedfs.service"
-systemctl stop seaweedfs.service 2>/dev/null || true
+echo "==> Stopping and disabling seaweedfs.service"
+systemctl disable --now seaweedfs.service 2>/dev/null || systemctl stop seaweedfs.service 2>/dev/null || true
 
-echo "==> Removing systemd quadlet file"
+echo "==> Removing systemd unit files"
 if [[ -f "${QUADLET_FILE}" ]]; then
   rm -f "${QUADLET_FILE}"
   echo "    - Removed ${QUADLET_FILE}"
+fi
+if [[ -f "${SYSTEMD_FILE}" ]]; then
+  rm -f "${SYSTEMD_FILE}"
+  echo "    - Removed ${SYSTEMD_FILE}"
 fi
 
 echo "==> Reloading systemd daemon"
