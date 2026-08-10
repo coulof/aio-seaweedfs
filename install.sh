@@ -13,6 +13,37 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+echo "==> Checking system prerequisites"
+
+if ! command -v podman >/dev/null 2>&1; then
+  echo "Error: 'podman' is not installed or not in PATH." >&2
+  echo "Please install Podman (e.g., 'sudo zypper install podman' on openSUSE)." >&2
+  exit 1
+fi
+
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "Error: 'openssl' is not installed or not in PATH." >&2
+  echo "Please install OpenSSL (e.g., 'sudo zypper install openssl')." >&2
+  exit 1
+fi
+
+QUADLET_BIN=""
+for path in /usr/libexec/podman/quadlet /usr/lib/podman/quadlet /usr/lib/systemd/system-generators/podman-system-generator; do
+  if [[ -x "$path" ]]; then
+    QUADLET_BIN="$path"
+    break
+  fi
+done
+
+if [[ -z "${QUADLET_BIN}" ]]; then
+  PODMAN_VER="$(podman --version 2>/dev/null || echo 'unknown')"
+  echo "Warning: Quadlet generator binary not found at standard system paths." >&2
+  echo "Installed Podman version: ${PODMAN_VER}" >&2
+  echo "Podman Quadlet requires Podman >= 4.4.0." >&2
+else
+  echo "    - Found Quadlet generator at ${QUADLET_BIN}"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="/srv/seaweedfs/data"
 ENTRYPOINT_DEST="/srv/seaweedfs/entrypoint.sh"
@@ -47,6 +78,13 @@ install -m 0644 "${SCRIPT_DIR}/seaweedfs.container" "${QUADLET_DIR}/seaweedfs.co
 
 echo "==> Reloading systemd and starting seaweedfs.service"
 systemctl daemon-reload
+
+if ! systemctl list-unit-files seaweedfs.service >/dev/null 2>&1 && ! systemctl status seaweedfs.service >/dev/null 2>&1; then
+  echo "Error: systemd generator failed to create 'seaweedfs.service' from '${QUADLET_DIR}/seaweedfs.container'." >&2
+  echo "Ensure Podman Quadlet is supported on this host (Podman >= 4.4.0)." >&2
+  exit 1
+fi
+
 systemctl restart seaweedfs.service
 
 echo ""
