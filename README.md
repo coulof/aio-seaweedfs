@@ -28,7 +28,7 @@ That's it — `install.sh` will:
 3. Generate Podman secrets for admin UI and S3 credentials (random passwords,
    skipped if they already exist — safe to re-run)
 4. Install the quadlet unit to `/etc/containers/systemd/seaweedfs.container`
-5. `systemctl daemon-reload` + `enable --now seaweedfs.service`
+5. `systemctl daemon-reload` + `restart seaweedfs.service`
 
 ## Ports
 

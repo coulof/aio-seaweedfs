@@ -79,10 +79,8 @@ else
 fi
 
 echo ""
-echo "==> Stopping and disabling seaweedfs.service"
-if systemctl is-active --quiet seaweedfs.service 2>/dev/null || systemctl is-enabled --quiet seaweedfs.service 2>/dev/null; then
-  systemctl disable --now seaweedfs.service || true
-fi
+echo "==> Stopping seaweedfs.service"
+systemctl stop seaweedfs.service 2>/dev/null || true
 
 echo "==> Removing systemd quadlet file"
 if [[ -f "${QUADLET_FILE}" ]]; then

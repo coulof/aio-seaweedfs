@@ -45,9 +45,9 @@ echo "==> Installing quadlet unit to ${QUADLET_DIR}"
 mkdir -p "${QUADLET_DIR}"
 install -m 0644 "${SCRIPT_DIR}/seaweedfs.container" "${QUADLET_DIR}/seaweedfs.container"
 
-echo "==> Reloading systemd and enabling the service"
+echo "==> Reloading systemd and starting seaweedfs.service"
 systemctl daemon-reload
-systemctl enable --now seaweedfs.service
+systemctl restart seaweedfs.service
 
 echo ""
 echo "==> Done. Service status:"
