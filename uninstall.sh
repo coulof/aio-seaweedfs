@@ -1,7 +1,7 @@
 #!/bin/bash
 # uninstall.sh — uninstalls SeaweedFS Podman quadlet service
 #
-# Usage: sudo ./uninstall.sh [--purge]
+# Usage: sudo ./uninstall.sh [--purge] [-y|--yes]
 #
 # Removes systemd service, quadlet file, Podman secrets, and entrypoint script.
 # Retains data in /srv/seaweedfs/data unless --purge is passed.
@@ -14,15 +14,71 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 PURGE_DATA=false
-if [[ "${1:-}" == "--purge" || "${1:-}" == "--purge-data" ]]; then
-  PURGE_DATA=true
-fi
+SKIP_PROMPT=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --purge|--purge-data)
+      PURGE_DATA=true
+      ;;
+    -y|--yes)
+      SKIP_PROMPT=true
+      ;;
+  esac
+done
 
 QUADLET_FILE="/etc/containers/systemd/seaweedfs.container"
 ENTRYPOINT_FILE="/srv/seaweedfs/entrypoint.sh"
 DATA_DIR="/srv/seaweedfs/data"
 SRV_DIR="/srv/seaweedfs"
 
+if [[ "${PURGE_DATA}" == "true" ]]; then
+  echo ""
+  echo "========================================================================="
+  echo "                     !!! CRITICAL DATA LOSS WARNING !!!"
+  echo "========================================================================="
+  echo " You are about to UNINSTALL SeaweedFS AND PURGE ALL PERSISTENT DATA."
+  echo " Path to be PERMANENTLY DELETED: ${SRV_DIR}"
+  echo ""
+  echo " This includes:"
+  echo "   - All Master metadata"
+  echo "   - All Filer metadata"
+  echo "   - ALL STORED VOLUMES AND FILE DATA"
+  echo "   - All Podman secrets and Quadlet unit files"
+  echo ""
+  echo " THIS ACTION CANNOT BE UNDONE!"
+  echo "========================================================================="
+  echo ""
+
+  if [[ "${SKIP_PROMPT}" == "false" ]]; then
+    read -rp "Type 'YES' (all caps) to confirm permanent deletion of all data: " CONFIRM
+    if [[ "${CONFIRM}" != "YES" ]]; then
+      echo "Aborted. No changes were made."
+      exit 1
+    fi
+  fi
+else
+  echo ""
+  echo "========================================================================="
+  echo "                           WARNING"
+  echo "========================================================================="
+  echo " You are about to uninstall the SeaweedFS systemd Quadlet service."
+  echo " This will stop the service and delete Podman secrets and unit files."
+  echo ""
+  echo " Note: Data in ${DATA_DIR} WILL BE PRESERVED."
+  echo "========================================================================="
+  echo ""
+
+  if [[ "${SKIP_PROMPT}" == "false" ]]; then
+    read -rp "Are you sure you want to proceed with uninstallation? [y/N]: " CONFIRM
+    if [[ "${CONFIRM}" != "y" && "${CONFIRM}" != "Y" ]]; then
+      echo "Aborted. No changes were made."
+      exit 1
+    fi
+  fi
+fi
+
+echo ""
 echo "==> Stopping and disabling seaweedfs.service"
 if systemctl is-active --quiet seaweedfs.service 2>/dev/null || systemctl is-enabled --quiet seaweedfs.service 2>/dev/null; then
   systemctl disable --now seaweedfs.service || true

@@ -6,12 +6,13 @@ ports are published directly to the host.
 
 ## Files
 
-| File               | Purpose                                                        |
-|--------------------|------------------------------------------------------------------|
-| `seaweedfs.container` | Podman quadlet unit — defines the container, volumes, ports, secrets |
-| `entrypoint.sh`    | Wires the injected secret env vars into `weed` CLI flags        |
-| `install.sh`       | Idempotent setup script: dirs, secrets, quadlet install, enable |
-| `uninstall.sh`     | Cleanup script: stops service, removes quadlet, secrets & files |
+| File                   | Purpose                                                        |
+|------------------------|------------------------------------------------------------------|
+| `seaweedfs.container`  | Podman quadlet unit — defines the container, volumes, ports, secrets |
+| `entrypoint.sh`        | Wires the injected secret env vars into `weed` CLI flags        |
+| `install.sh`           | Idempotent setup script: dirs, secrets, quadlet install, enable |
+| `uninstall.sh`         | Cleanup script: stops service, removes quadlet, secrets & files |
+| `rotate-credentials.sh`| Credential rotation script: regenerates secrets and restarts unit|
 
 ## Quick start
 
@@ -60,9 +61,13 @@ sudo podman secret inspect seaweedfs-s3-key --showsecret
 sudo podman secret inspect seaweedfs-s3-secret --showsecret
 ```
 
-To rotate a credential: `sudo podman secret rm <name>`, then re-run
-`sudo ./install.sh` (it will regenerate the missing one), then
-`sudo systemctl restart seaweedfs.service`.
+To rotate credentials automatically:
+
+```bash
+sudo ./rotate-credentials.sh             # rotates all generated credentials
+sudo ./rotate-credentials.sh --admin-pass  # rotates only Admin UI password
+sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
+```
 
 ## Data persistence
 
@@ -95,16 +100,22 @@ the stale config.)
 
 ## Uninstallation
 
-To remove the service, secrets, and installed files while preserving `/srv/seaweedfs/data`:
+To remove the service, Podman secrets, and Quadlet file while preserving `/srv/seaweedfs/data` (prompts for confirmation):
 
 ```bash
 sudo ./uninstall.sh
 ```
 
-To remove everything including persistent data (`/srv/seaweedfs`):
+To remove everything including **PERMANENTLY DELETING ALL PERSISTENT DATA** in `/srv/seaweedfs` (requires typing `YES` to confirm):
 
 ```bash
 sudo ./uninstall.sh --purge
+```
+
+For non-interactive or automated scripts, pass `-y` / `--yes` to skip prompts:
+
+```bash
+sudo ./uninstall.sh --purge -y
 ```
 
 ## Known gaps / next steps
