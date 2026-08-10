@@ -4,7 +4,7 @@
 # Usage: sudo ./install.sh
 #
 # Idempotent: safe to re-run. Existing secrets are left untouched (use
-# `podman secret rm <name>` first if you want to rotate one).
+# `sudo ./rotate-credentials.sh` if you want to rotate them).
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ install -m 0755 "${SCRIPT_DIR}/entrypoint.sh" "${ENTRYPOINT_DEST}"
 echo "==> Creating Podman secrets (skipped if they already exist)"
 create_secret_if_missing() {
   local name="$1" value="$2"
-  if podman secret exists "${name}" 2>/dev/null; then
+  if podman secret inspect "${name}" >/dev/null 2>&1; then
     echo "    - ${name} already exists, leaving as-is"
   else
     echo -n "${value}" | podman secret create "${name}" -
@@ -53,12 +53,23 @@ echo ""
 echo "==> Done. Service status:"
 systemctl status seaweedfs.service --no-pager || true
 
+get_secret_val() {
+  local name="$1"
+  local val
+  val="$(podman secret inspect "${name}" --showsecret --format '{{.SecretData}}' 2>/dev/null || true)"
+  if [[ -n "${val}" ]]; then
+    echo "${val}"
+  else
+    echo "(see: podman secret inspect ${name} --showsecret)"
+  fi
+}
+
 echo ""
 echo "==> Save these credentials somewhere safe (e.g. your password manager):"
-echo "    Admin UI user:     $(podman secret inspect seaweedfs-admin-user --showsecret --format '{{.SecretData}}' 2>/dev/null || echo '(see: podman secret inspect seaweedfs-admin-user --showsecret)')"
-echo "    Admin UI password: (see: podman secret inspect seaweedfs-admin-pass --showsecret)"
-echo "    S3 access key:     (see: podman secret inspect seaweedfs-s3-key --showsecret)"
-echo "    S3 secret key:     (see: podman secret inspect seaweedfs-s3-secret --showsecret)"
+echo "    Admin UI user:     $(get_secret_val "seaweedfs-admin-user")"
+echo "    Admin UI password: $(get_secret_val "seaweedfs-admin-pass")"
+echo "    S3 access key:     $(get_secret_val "seaweedfs-s3-key")"
+echo "    S3 secret key:     $(get_secret_val "seaweedfs-s3-secret")"
 echo ""
 echo "Endpoints:"
 echo "    S3 API     http://localhost:8333"

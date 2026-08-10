@@ -45,8 +45,8 @@ rotate_secret() {
   local secret_name="$1"
   local new_value="$2"
 
-  if podman secret exists "${secret_name}" 2>/dev/null; then
-    podman secret rm "${secret_name}" >/dev/null
+  if podman secret inspect "${secret_name}" >/dev/null 2>&1 || podman secret exists "${secret_name}" 2>/dev/null; then
+    podman secret rm "${secret_name}" >/dev/null 2>&1 || true
   fi
   echo -n "${new_value}" | podman secret create "${secret_name}" - >/dev/null
   echo "    - Rotated ${secret_name}"
@@ -72,10 +72,21 @@ else
   echo "    - Service not running/enabled; new secrets will take effect on next start."
 fi
 
+get_secret_val() {
+  local name="$1"
+  local val
+  val="$(podman secret inspect "${name}" --showsecret --format '{{.SecretData}}' 2>/dev/null || true)"
+  if [[ -n "${val}" ]]; then
+    echo "${val}"
+  else
+    echo "(not found)"
+  fi
+}
+
 echo ""
 echo "==> Credential rotation complete."
 echo "==> Current active credentials:"
-echo "    Admin UI user:     $(podman secret inspect seaweedfs-admin-user --showsecret --format '{{.SecretData}}' 2>/dev/null || echo '(not found)')"
-echo "    Admin UI password: $(podman secret inspect seaweedfs-admin-pass --showsecret --format '{{.SecretData}}' 2>/dev/null || echo '(not found)')"
-echo "    S3 access key:     $(podman secret inspect seaweedfs-s3-key --showsecret --format '{{.SecretData}}' 2>/dev/null || echo '(not found)')"
-echo "    S3 secret key:     $(podman secret inspect seaweedfs-s3-secret --showsecret --format '{{.SecretData}}' 2>/dev/null || echo '(not found)')"
+echo "    Admin UI user:     $(get_secret_val "seaweedfs-admin-user")"
+echo "    Admin UI password: $(get_secret_val "seaweedfs-admin-pass")"
+echo "    S3 access key:     $(get_secret_val "seaweedfs-s3-key")"
+echo "    S3 secret key:     $(get_secret_val "seaweedfs-s3-secret")"

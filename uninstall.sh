@@ -103,9 +103,11 @@ fi
 echo "==> Removing Podman secrets"
 remove_secret_if_exists() {
   local name="$1"
-  if podman secret exists "${name}" 2>/dev/null; then
-    podman secret rm "${name}"
+  if podman secret inspect "${name}" >/dev/null 2>&1 || podman secret exists "${name}" 2>/dev/null; then
+    podman secret rm "${name}" 2>/dev/null || true
     echo "    - Removed secret ${name}"
+  else
+    echo "    - Secret ${name} not found, skipping"
   fi
 }
 
