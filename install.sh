@@ -64,7 +64,7 @@ create_secret_if_missing() {
   if podman secret inspect "${name}" >/dev/null 2>&1 || podman secret exists "${name}" 2>/dev/null; then
     echo "    - ${name} already exists, leaving as-is"
   else
-    echo -n "${value}" | podman secret create "${name}" -
+    echo -n "${value}" | podman secret create "${name}" - >/dev/null
     echo "    - created ${name}"
   fi
 }
@@ -108,20 +108,25 @@ get_secret_val() {
   if [[ -n "${val}" ]]; then
     echo "${val}"
   else
-    echo "(see: podman secret inspect ${name} --showsecret)"
+    echo "(see: sudo podman secret inspect ${name} --showsecret)"
   fi
 }
 
 echo ""
-echo "==> Save these credentials somewhere safe (e.g. your password manager):"
-echo "    Admin UI user:     $(get_secret_val "seaweedfs-admin-user")"
-echo "    Admin UI password: $(get_secret_val "seaweedfs-admin-pass")"
-echo "    S3 access key:     $(get_secret_val "seaweedfs-s3-key")"
-echo "    S3 secret key:     $(get_secret_val "seaweedfs-s3-secret")"
+echo "========================================================================="
+echo "                  SeaweedFS Installation Complete"
+echo "========================================================================="
+echo " Save these credentials somewhere safe (e.g. in your password manager):"
 echo ""
-echo "Endpoints:"
-echo "    S3 API     http://localhost:8333"
-echo "    Master UI  http://localhost:9333"
-echo "    Filer UI   http://localhost:8888"
-echo "    WebDAV     http://localhost:7333"
-echo "    Admin UI   http://localhost:23646"
+echo "    Admin UI User:     $(get_secret_val "seaweedfs-admin-user")"
+echo "    Admin UI Password: $(get_secret_val "seaweedfs-admin-pass")"
+echo "    S3 Access Key:     $(get_secret_val "seaweedfs-s3-key")"
+echo "    S3 Secret Key:     $(get_secret_val "seaweedfs-s3-secret")"
+echo ""
+echo " Active Endpoints:"
+echo "    Master UI:         http://localhost:9333"
+echo "    Admin UI:          http://localhost:23646"
+echo "    S3 API:            http://localhost:8333"
+echo "    Filer UI:          http://localhost:8888"
+echo "    WebDAV:            http://localhost:7333"
+echo "========================================================================="
