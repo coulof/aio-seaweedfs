@@ -1,11 +1,9 @@
 #!/bin/sh
-# entrypoint.sh — starts SeaweedFS server with admin UI auth wired from env
-# (env vars are injected via Podman secrets, see seaweedfs.container)
+# entrypoint.sh — starts SeaweedFS mini server (Master, Volume, Filer, S3, WebDAV, Admin UI)
+# with admin UI authentication wired from environment variables.
 set -e
 
-exec /usr/bin/weed server \
+exec /usr/bin/weed mini \
   -dir=/data \
-  -s3 -s3.port=8333 \
-  -admin -admin.port=23646 \
-  -adminUser="${WEED_ADMIN_USER}" \
-  -adminPassword="${WEED_ADMIN_PASS}"
+  -admin.user="${WEED_ADMIN_USER}" \
+  -admin.password="${WEED_ADMIN_PASS}"
