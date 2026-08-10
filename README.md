@@ -11,6 +11,7 @@ ports are published directly to the host.
 | `seaweedfs.container` | Podman quadlet unit — defines the container, volumes, ports, secrets |
 | `entrypoint.sh`    | Wires the injected secret env vars into `weed` CLI flags        |
 | `install.sh`       | Idempotent setup script: dirs, secrets, quadlet install, enable |
+| `uninstall.sh`     | Cleanup script: stops service, removes quadlet, secrets & files |
 
 ## Quick start
 
@@ -91,6 +92,20 @@ sudo systemctl restart seaweedfs.service
 (Quadlet regenerates the actual systemd unit from the `.container` file at
 `daemon-reload` time — restarting without reloading first will silently use
 the stale config.)
+
+## Uninstallation
+
+To remove the service, secrets, and installed files while preserving `/srv/seaweedfs/data`:
+
+```bash
+sudo ./uninstall.sh
+```
+
+To remove everything including persistent data (`/srv/seaweedfs`):
+
+```bash
+sudo ./uninstall.sh --purge
+```
 
 ## Known gaps / next steps
 
