@@ -57,11 +57,24 @@ quadlet file (which lives in `/etc` and is typically world-readable).
 
 Retrieve them any time:
 
+On **Podman >= 4.2**:
 ```bash
 sudo podman secret inspect seaweedfs-admin-user --showsecret
 sudo podman secret inspect seaweedfs-admin-pass --showsecret
 sudo podman secret inspect seaweedfs-s3-key --showsecret
 sudo podman secret inspect seaweedfs-s3-secret --showsecret
+```
+
+On **Podman < 4.2** (e.g. Podman 3.4):
+```bash
+sudo jq -r 'to_entries[] | "\(.key): \(.value | @base64d)"' /var/lib/containers/storage/secrets/filedriver/secretsdata.json
+```
+or map names to values:
+```bash
+sudo bash -c 'podman secret ls --format "{{.ID}} {{.Name}}" | while read -r id name; do
+  val=$(jq -r --arg id "$id" ".[\$id] // empty | @base64d" /var/lib/containers/storage/secrets/filedriver/secretsdata.json)
+  printf "%-22s: %s\n" "$name" "$val"
+done'
 ```
 
 To rotate credentials automatically:

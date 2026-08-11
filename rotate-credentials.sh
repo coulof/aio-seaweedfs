@@ -74,12 +74,29 @@ fi
 
 get_secret_val() {
   local name="$1"
-  local val
+  local val=""
+
+  # 1. Try Podman 4.2+ --showsecret
   val="$(podman secret inspect "${name}" --showsecret --format '{{.SecretData}}' 2>/dev/null || true)"
+
+  # 2. Try reading and decoding directly from host storage (Podman 3.4 / legacy)
+  if [[ -z "${val}" ]] && command -v jq >/dev/null 2>&1 && [[ -f "/var/lib/containers/storage/secrets/filedriver/secretsdata.json" ]]; then
+    local sec_id
+    sec_id="$(podman secret ls --format '{{.ID}} {{.Name}}' 2>/dev/null | awk -v n="${name}" '$2 == n {print $1}')"
+    if [[ -n "${sec_id}" ]]; then
+      val="$(jq -r --arg id "${sec_id}" '.[$id] // empty | @base64d' /var/lib/containers/storage/secrets/filedriver/secretsdata.json 2>/dev/null || true)"
+    fi
+  fi
+
+  # 3. Fallback: temporary podman run secret mount (works on any Podman version with image present)
+  if [[ -z "${val}" ]]; then
+    val="$(podman run --rm --entrypoint="" --secret "${name},type=env,target=SECRET_VAL" docker.io/chrislusf/seaweedfs:latest /bin/sh -c 'printf "%s" "$SECRET_VAL"' 2>/dev/null || true)"
+  fi
+
   if [[ -n "${val}" ]]; then
     echo "${val}"
   else
-    echo "(not found)"
+    echo "(could not extract secret value)"
   fi
 }
 
