@@ -31,7 +31,7 @@ ExecStart=/usr/bin/podman run \
   --secret seaweedfs-s3-key,type=env,target=AWS_ACCESS_KEY_ID \
   --secret seaweedfs-s3-secret,type=env,target=AWS_SECRET_ACCESS_KEY \
   --env S3_BUCKET=rancher-backup \
-  --env S3_DOMAIN_NAME=s3.etai-hv-bk.ato.gov.et \
+  --env S3_DOMAIN_NAME=s3.eati-hv-bk-sv.ati.gov.et \
   docker.io/chrislusf/seaweedfs:4.41 \
   /entrypoint.sh
 ExecStop=-/usr/bin/podman stop -t 10 seaweedfs

@@ -2,22 +2,22 @@
     local_certs
 }
 
-*.s3.etai-hv-bk.ato.gov.et, s3.etai-hv-bk.ato.gov.et {
+*.s3.eati-hv-bk-sv.ati.gov.et, s3.eati-hv-bk-sv.ati.gov.et {
     tls internal
     reverse_proxy seaweedfs:8333
 }
 
-admin.etai-hv-bk.ato.gov.et {
+admin.eati-hv-bk-sv.ati.gov.et {
     tls internal
     reverse_proxy seaweedfs:23646
 }
 
-filer.etai-hv-bk.ato.gov.et {
+filer.eati-hv-bk-sv.ati.gov.et {
     tls internal
     reverse_proxy seaweedfs:8888
 }
 
-master.etai-hv-bk.ato.gov.et {
+master.eati-hv-bk-sv.ati.gov.et {
     tls internal
     reverse_proxy seaweedfs:9333
 }

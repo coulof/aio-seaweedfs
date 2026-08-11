@@ -112,6 +112,10 @@ if [[ "${USE_QUADLET}" == "true" ]]; then
 
   systemctl restart seaweedfs.service
   systemctl restart caddy.service
+
+  # Warm up Caddy HTTPS endpoint to trigger PKI local root CA generation
+  echo "==> Warming up Caddy HTTPS to initialize local PKI Root CA"
+  curl -k -s -o /dev/null https://localhost:443 2>/dev/null || true
 else
   echo "==> Ensuring Podman network seaweedfs-net exists"
   if ! podman network exists seaweedfs-net 2>/dev/null; then
@@ -127,6 +131,10 @@ else
   systemctl daemon-reload
   systemctl enable --now seaweedfs.service
   systemctl enable --now caddy.service
+
+  # Warm up Caddy HTTPS endpoint to trigger PKI local root CA generation
+  echo "==> Warming up Caddy HTTPS to initialize local PKI Root CA"
+  curl -k -s -o /dev/null https://localhost:443 2>/dev/null || true
 fi
 
 echo ""
@@ -179,11 +187,11 @@ echo "    Admin UI Password: $(get_secret_val "seaweedfs-admin-pass")"
 echo "    S3 Access Key:     $(get_secret_val "seaweedfs-s3-key")"
 echo "    S3 Secret Key:     $(get_secret_val "seaweedfs-s3-secret")"
 echo ""
-echo " Active HTTPS Endpoints (via Caddy Reverse Proxy):"
-echo "    S3 API & Buckets:  https://s3.etai-hv-bk.ato.gov.et (and *.s3.etai-hv-bk.ato.gov.et)"
-echo "    Admin UI:          https://admin.etai-hv-bk.ato.gov.et"
-echo "    Filer UI:          https://filer.etai-hv-bk.ato.gov.et"
-echo "    Master UI:         https://master.etai-hv-bk.ato.gov.et"
+ echo " Active HTTPS Endpoints (via Caddy Reverse Proxy):"
+echo "    S3 API & Buckets:  https://s3.eati-hv-bk-sv.ati.gov.et (and *.s3.eati-hv-bk-sv.ati.gov.et)"
+echo "    Admin UI:          https://admin.eati-hv-bk-sv.ati.gov.et"
+echo "    Filer UI:          https://filer.eati-hv-bk-sv.ati.gov.et"
+echo "    Master UI:         https://master.eati-hv-bk-sv.ati.gov.et"
 echo ""
 echo " Direct HTTP Fallback Endpoints:"
 echo "    S3 API:            http://localhost:8333"
