@@ -13,6 +13,7 @@ Admin UI) with a Caddy HTTPS reverse proxy running as root-managed Podman servic
 | `caddy.service`         | Caddy standard systemd unit file (fallback for Podman < 4.4)     |
 | `Caddyfile`             | Reverse proxy configuration (HTTPS, wildcard S3 bucket routing)  |
 | `entrypoint.sh`         | SeaweedFS entrypoint wiring auth & S3 domain name flags          |
+| `get-info.sh`           | Summary script displaying all URLs, ports, status & secrets      |
 | `setup-ufw.sh`          | Configures UFW firewall rules for Caddy & SeaweedFS ports        |
 | `test-s3.sh`            | Automated S3 v4 signature sanity test script                     |
 | `install.sh`            | Idempotent setup & update script                                 |
@@ -106,6 +107,7 @@ sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
 ## Operations
 
 ```bash
+sudo ./get-info.sh                          # Displays all URLs, ports, service status, & secrets
 systemctl status seaweedfs.service caddy.service
 journalctl -u seaweedfs.service -f
 journalctl -u caddy.service -f

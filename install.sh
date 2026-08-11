@@ -147,61 +147,6 @@ echo "==> Done. Service status:"
 systemctl status seaweedfs.service --no-pager || true
 systemctl status caddy.service --no-pager || true
 
-get_secret_val() {
-  local name="$1"
-  local val=""
-
-  # 1. Try Podman 4.2+ --showsecret
-  val="$(podman secret inspect "${name}" --showsecret --format '{{.SecretData}}' 2>/dev/null || true)"
-
-  # 2. Try reading and decoding directly from host storage (Podman 3.4 / legacy)
-  if [[ -z "${val}" ]] && command -v jq >/dev/null 2>&1 && [[ -f "/var/lib/containers/storage/secrets/filedriver/secretsdata.json" ]]; then
-    local sec_id
-    sec_id="$(podman secret ls --format '{{.ID}} {{.Name}}' 2>/dev/null | awk -v n="${name}" '$2 == n {print $1}')"
-    if [[ -n "${sec_id}" ]]; then
-      val="$(jq -r --arg id "${sec_id}" '.[$id] // empty | @base64d' /var/lib/containers/storage/secrets/filedriver/secretsdata.json 2>/dev/null || true)"
-    fi
-  fi
-
-  # 3. Fallback: temporary podman run secret mount (works on any Podman version with image present)
-  if [[ -z "${val}" ]]; then
-    val="$(podman run --rm --entrypoint="" --secret "${name},type=env,target=SECRET_VAL" docker.io/chrislusf/seaweedfs:4.41 /bin/sh -c 'printf "%s" "$SECRET_VAL"' 2>/dev/null || true)"
-  fi
-
-  if [[ -n "${val}" ]]; then
-    echo "${val}"
-  else
-    echo "(could not extract secret value)"
-  fi
-}
-
-CA_ROOT_PATH="/srv/caddy/data/caddy/pki/authorities/local/root.crt"
-
-echo ""
-echo "========================================================================="
-if [[ "${IS_UPDATE}" == "true" ]]; then
-  echo "                  SeaweedFS & Caddy Update Complete"
-else
-  echo "                  SeaweedFS & Caddy Installation Complete"
+if [[ -f "${SCRIPT_DIR}/get-info.sh" ]]; then
+  "${SCRIPT_DIR}/get-info.sh"
 fi
-echo "========================================================================="
-echo " Save these credentials somewhere safe (e.g. in your password manager):"
-echo ""
-echo "    Admin UI User:     $(get_secret_val "seaweedfs-admin-user")"
-echo "    Admin UI Password: $(get_secret_val "seaweedfs-admin-pass")"
-echo "    S3 Access Key:     $(get_secret_val "seaweedfs-s3-key")"
-echo "    S3 Secret Key:     $(get_secret_val "seaweedfs-s3-secret")"
-echo ""
-echo " Active HTTPS Endpoints (via Caddy Reverse Proxy):"
-echo "    S3 API & Buckets:  https://s3.eati-hv-bk-sv.ati.gov.et (and *.s3.eati-hv-bk-sv.ati.gov.et)"
-echo "    Admin UI:          https://admin.eati-hv-bk-sv.ati.gov.et"
-echo "    Filer UI:          https://filer.eati-hv-bk-sv.ati.gov.et"
-echo "    Master UI:         https://master.eati-hv-bk-sv.ati.gov.et"
-echo ""
-echo " Direct HTTP Fallback Endpoints:"
-echo "    S3 API:            http://localhost:8333"
-echo "    Admin UI:          http://localhost:23646"
-echo ""
-echo " Caddy Local Root CA Certificate (install on clients if trusting HTTPS):"
-echo "    Path: ${CA_ROOT_PATH}"
-echo "========================================================================="
