@@ -3,7 +3,7 @@
 #
 # Usage:
 #   sudo ./install.sh          # Fresh installation / idempotent rerun
-#   sudo ./install.sh --update # Update unit files, Caddyfile, and restart services without touch secrets
+#   sudo ./install.sh --update # Update unit files, Caddyfile, and restart services without touching secrets
 #
 # Supports both Podman Quadlet (Podman >= 4.4.0) and standard systemd unit files (Podman 3.x / < 4.4.0).
 
@@ -27,6 +27,13 @@ if [[ "${IS_UPDATE}" == "true" ]]; then
   echo "==> Running in UPDATE mode (refreshing files and restarting services)"
 else
   echo "==> Running in INSTALL mode"
+fi
+
+echo "==> Cleaning up any stale CNI network configurations"
+rm -f /etc/cni/net.d/seaweedfs-net.conflist
+rm -f /etc/containers/systemd/seaweedfs-net.network
+if podman network exists seaweedfs-net 2>/dev/null; then
+  podman network rm seaweedfs-net 2>/dev/null || true
 fi
 
 echo "==> Checking system prerequisites"
@@ -70,6 +77,11 @@ ENTRYPOINT_DEST="/srv/seaweedfs/entrypoint.sh"
 QUADLET_DIR="/etc/containers/systemd"
 SYSTEMD_DIR="/etc/systemd/system"
 
+echo "==> Configuring firewall rules (if UFW is active)"
+if [[ -f "${SCRIPT_DIR}/setup-ufw.sh" ]]; then
+  "${SCRIPT_DIR}/setup-ufw.sh" || true
+fi
+
 echo "==> Creating directories"
 mkdir -p "${DATA_DIR}" "${CADDY_DIR}" "${CADDY_DATA_DIR}" "${CADDY_CONFIG_DIR}"
 chown 1000:1000 "${DATA_DIR}"   # seaweedfs container runs as uid 1000 by default
@@ -103,7 +115,6 @@ create_secret_if_missing "seaweedfs-s3-secret" "$(openssl rand -base64 32)"
 if [[ "${USE_QUADLET}" == "true" ]]; then
   echo "==> Installing Quadlet units to ${QUADLET_DIR}"
   mkdir -p "${QUADLET_DIR}"
-  install -m 0644 "${SCRIPT_DIR}/seaweedfs-net.network" "${QUADLET_DIR}/seaweedfs-net.network"
   install -m 0644 "${SCRIPT_DIR}/seaweedfs.container" "${QUADLET_DIR}/seaweedfs.container"
   install -m 0644 "${SCRIPT_DIR}/caddy.container" "${QUADLET_DIR}/caddy.container"
 
@@ -115,14 +126,8 @@ if [[ "${USE_QUADLET}" == "true" ]]; then
 
   # Warm up Caddy HTTPS endpoint to trigger PKI local root CA generation
   echo "==> Warming up Caddy HTTPS to initialize local PKI Root CA"
-  curl -k -s -o /dev/null https://localhost:443 2>/dev/null || true
+  curl -k -s -o /dev/null --resolve "s3.eati-hv-bk-sv.ati.gov.et:443:127.0.0.1" https://s3.eati-hv-bk-sv.ati.gov.et 2>/dev/null || true
 else
-  echo "==> Ensuring Podman network seaweedfs-net exists"
-  if ! podman network exists seaweedfs-net 2>/dev/null; then
-    podman network create seaweedfs-net >/dev/null
-    echo "    - Created network seaweedfs-net"
-  fi
-
   echo "==> Installing standard systemd units to ${SYSTEMD_DIR}"
   install -m 0644 "${SCRIPT_DIR}/seaweedfs.service" "${SYSTEMD_DIR}/seaweedfs.service"
   install -m 0644 "${SCRIPT_DIR}/caddy.service" "${SYSTEMD_DIR}/caddy.service"
@@ -134,7 +139,7 @@ else
 
   # Warm up Caddy HTTPS endpoint to trigger PKI local root CA generation
   echo "==> Warming up Caddy HTTPS to initialize local PKI Root CA"
-  curl -k -s -o /dev/null https://localhost:443 2>/dev/null || true
+  curl -k -s -o /dev/null --resolve "s3.eati-hv-bk-sv.ati.gov.et:443:127.0.0.1" https://s3.eati-hv-bk-sv.ati.gov.et 2>/dev/null || true
 fi
 
 echo ""
@@ -187,7 +192,7 @@ echo "    Admin UI Password: $(get_secret_val "seaweedfs-admin-pass")"
 echo "    S3 Access Key:     $(get_secret_val "seaweedfs-s3-key")"
 echo "    S3 Secret Key:     $(get_secret_val "seaweedfs-s3-secret")"
 echo ""
- echo " Active HTTPS Endpoints (via Caddy Reverse Proxy):"
+echo " Active HTTPS Endpoints (via Caddy Reverse Proxy):"
 echo "    S3 API & Buckets:  https://s3.eati-hv-bk-sv.ati.gov.et (and *.s3.eati-hv-bk-sv.ati.gov.et)"
 echo "    Admin UI:          https://admin.eati-hv-bk-sv.ati.gov.et"
 echo "    Filer UI:          https://filer.eati-hv-bk-sv.ati.gov.et"

@@ -7,7 +7,7 @@ Wants=network-online.target
 [Container]
 Image=docker.io/chrislusf/seaweedfs:4.41
 ContainerName=seaweedfs
-Network=seaweedfs-net.network
+Network=host
 AutoUpdate=registry
 
 # Data persistence — bind mount so the disk location is explicit

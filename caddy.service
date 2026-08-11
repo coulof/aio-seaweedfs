@@ -10,6 +10,7 @@ Type=simple
 Restart=always
 RestartSec=5
 TimeoutStartSec=60
+ExecStartPre=-/bin/rm -f %t/%n.ctr-id
 ExecStartPre=-/usr/bin/rm -f %t/%n.ctr-id
 ExecStartPre=-/usr/bin/podman rm -f caddy
 ExecStart=/usr/bin/podman run \
@@ -18,15 +19,15 @@ ExecStart=/usr/bin/podman run \
   --cgroups=no-conmon \
   --rm \
   --replace \
-  --network seaweedfs-net \
+  --network host \
   --volume /srv/caddy/Caddyfile:/etc/caddy/Caddyfile:ro \
   --volume /srv/caddy/data:/data:Z \
   --volume /srv/caddy/config:/config:Z \
-  --publish 80:80 \
-  --publish 443:443 \
-  docker.io/library/caddy:2
+  docker.io/library/caddy:2 \
+  caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 ExecStop=-/usr/bin/podman stop -t 10 caddy
 ExecStopPost=-/usr/bin/podman rm -f caddy
+ExecStopPost=-/bin/rm -f %t/%n.ctr-id
 ExecStopPost=-/usr/bin/rm -f %t/%n.ctr-id
 
 [Install]

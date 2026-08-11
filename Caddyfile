@@ -4,20 +4,20 @@
 
 *.s3.eati-hv-bk-sv.ati.gov.et, s3.eati-hv-bk-sv.ati.gov.et {
     tls internal
-    reverse_proxy seaweedfs:8333
+    reverse_proxy 127.0.0.1:8333
 }
 
 admin.eati-hv-bk-sv.ati.gov.et {
     tls internal
-    reverse_proxy seaweedfs:23646
+    reverse_proxy 127.0.0.1:23646
 }
 
 filer.eati-hv-bk-sv.ati.gov.et {
     tls internal
-    reverse_proxy seaweedfs:8888
+    reverse_proxy 127.0.0.1:8888
 }
 
 master.eati-hv-bk-sv.ati.gov.et {
     tls internal
-    reverse_proxy seaweedfs:9333
+    reverse_proxy 127.0.0.1:9333
 }
