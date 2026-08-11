@@ -45,10 +45,10 @@ sudo ./install.sh --update
 
 Caddy serves reverse-proxied HTTPS endpoints using automatically generated local CA certificates (`tls internal`):
 
-- **S3 Endpoint & Buckets**: `https://s3.example.com` and wildcard buckets like `https://rancher-backup.s3.example.com`
-- **Admin UI**: `https://admin.example.com`
-- **Filer UI**: `https://filer.example.com`
-- **Master UI**: `https://master.example.com`
+- **S3 Endpoint & Buckets**: `https://s3.etai-hv-bk.ato.gov.et` and wildcard buckets like `https://rancher-backup.s3.etai-hv-bk.ato.gov.et`
+- **Admin UI**: `https://admin.etai-hv-bk.ato.gov.et`
+- **Filer UI**: `https://filer.etai-hv-bk.ato.gov.et`
+- **Master UI**: `https://master.etai-hv-bk.ato.gov.et`
 
 ### Trusting Caddy's Local Root CA
 

@@ -2,22 +2,22 @@
     local_certs
 }
 
-*.s3.example.com, s3.example.com {
+*.s3.etai-hv-bk.ato.gov.et, s3.etai-hv-bk.ato.gov.et {
     tls internal
     reverse_proxy seaweedfs:8333
 }
 
-admin.example.com {
+admin.etai-hv-bk.ato.gov.et {
     tls internal
     reverse_proxy seaweedfs:23646
 }
 
-filer.example.com {
+filer.etai-hv-bk.ato.gov.et {
     tls internal
     reverse_proxy seaweedfs:8888
 }
 
-master.example.com {
+master.etai-hv-bk.ato.gov.et {
     tls internal
     reverse_proxy seaweedfs:9333
 }

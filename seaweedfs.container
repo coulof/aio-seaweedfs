@@ -35,7 +35,7 @@ Secret=seaweedfs-s3-key,type=env,target=AWS_ACCESS_KEY_ID
 Secret=seaweedfs-s3-secret,type=env,target=AWS_SECRET_ACCESS_KEY
 
 Environment=S3_BUCKET=rancher-backup
-Environment=S3_DOMAIN_NAME=s3.example.com
+Environment=S3_DOMAIN_NAME=s3.etai-hv-bk.ato.gov.et
 
 # Health check hits the master's cluster status endpoint
 HealthCmd=curl -f http://localhost:9333/cluster/status || exit 1
