@@ -144,6 +144,4 @@ sudo ./uninstall.sh --purge -y
   out for now; revisit if this needs to run with least privilege.
 - **Single node** — no replication/erasure coding configured; fine for a
   lab/dev box, not for anything you can't afford to lose.
-- **Image pinning** — `seaweedfs.container` uses `chrislusf/seaweedfs:latest`
-  with `AutoUpdate=registry`. For anything beyond a lab, pin to a specific
-  tag instead for reproducibility.
+- **Image pinning** — `seaweedfs.container` pins to `chrislusf/seaweedfs:4.41`. Update this tag when upgrading SeaweedFS versions.

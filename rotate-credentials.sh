@@ -90,7 +90,7 @@ get_secret_val() {
 
   # 3. Fallback: temporary podman run secret mount (works on any Podman version with image present)
   if [[ -z "${val}" ]]; then
-    val="$(podman run --rm --entrypoint="" --secret "${name},type=env,target=SECRET_VAL" docker.io/chrislusf/seaweedfs:latest /bin/sh -c 'printf "%s" "$SECRET_VAL"' 2>/dev/null || true)"
+    val="$(podman run --rm --entrypoint="" --secret "${name},type=env,target=SECRET_VAL" docker.io/chrislusf/seaweedfs:4.41 /bin/sh -c 'printf "%s" "$SECRET_VAL"' 2>/dev/null || true)"
   fi
 
   if [[ -n "${val}" ]]; then
