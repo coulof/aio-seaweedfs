@@ -1,59 +1,78 @@
-# SeaweedFS on Podman (systemd quadlet)
+# SeaweedFS & Caddy HTTPS on Podman (systemd quadlet)
 
 Boot-persistent SeaweedFS deployment (S3 API, Master, Volume, Filer, WebDAV,
-Admin UI) running as a root-managed Podman quadlet service. No reverse proxy —
-ports are published directly to the host.
+Admin UI) with a Caddy HTTPS reverse proxy running as root-managed Podman services.
 
 ## Files
 
-| File                   | Purpose                                                        |
-|------------------------|------------------------------------------------------------------|
-| `seaweedfs.container`  | Podman Quadlet unit (used on Podman >= 4.4.0)                   |
-| `seaweedfs.service`    | Standard systemd unit file (fallback for Podman < 4.4.0 / 3.x)   |
-| `entrypoint.sh`        | Wires the injected secret env vars into `weed` CLI flags        |
-| `install.sh`           | Idempotent setup script: auto-detects Quadlet vs systemd unit   |
-| `uninstall.sh`         | Cleanup script: stops service, removes unit files, secrets & data|
-| `rotate-credentials.sh`| Credential rotation script: regenerates secrets and restarts unit|
+| File                    | Purpose                                                          |
+|-------------------------|------------------------------------------------------------------|
+| `seaweedfs.container`   | SeaweedFS Quadlet unit (Podman >= 4.4.0)                         |
+| `caddy.container`       | Caddy HTTPS Reverse Proxy Quadlet unit (Podman >= 4.4.0)          |
+| `seaweedfs-net.network` | Podman Network Quadlet unit (Podman >= 4.4.0)                   |
+| `seaweedfs.service`     | SeaweedFS standard systemd unit file (fallback for Podman < 4.4) |
+| `caddy.service`         | Caddy standard systemd unit file (fallback for Podman < 4.4)     |
+| `Caddyfile`             | Reverse proxy configuration (HTTPS, wildcard S3 bucket routing)  |
+| `entrypoint.sh`         | SeaweedFS entrypoint wiring auth & S3 domain name flags          |
+| `install.sh`            | Idempotent setup & update script                                 |
+| `uninstall.sh`          | Cleanup script (retains data/secrets/CA unless `--purge` used)   |
+| `rotate-credentials.sh` | Credential rotation script                                       |
 
 ## Quick start
 
 ```bash
-git clone <this-repo> seaweedfs-setup   # or copy the 4 files over
+git clone <this-repo> seaweedfs-setup
 cd seaweedfs-setup
 sudo ./install.sh
 ```
 
-That's it — `install.sh` will:
-1. Create `/srv/seaweedfs/data` (bind-mounted into the container)
-2. Install `entrypoint.sh` to `/srv/seaweedfs/entrypoint.sh`
-3. Generate Podman secrets for admin UI and S3 credentials (random passwords,
-   skipped if they already exist — safe to re-run)
-4. Detect Podman capability:
-   - On Podman >= 4.4.0: installs Quadlet unit `/etc/containers/systemd/seaweedfs.container`
-   - On Podman < 4.4.0 (e.g. Podman 3.4.4): installs standard systemd unit `/etc/systemd/system/seaweedfs.service`
-5. `systemctl daemon-reload` + enables/restarts `seaweedfs.service`
+`install.sh` will:
+1. Create `/srv/seaweedfs/data` and `/srv/caddy`
+2. Install `entrypoint.sh` and `Caddyfile`
+3. Generate Podman secrets for admin UI and S3 credentials (skipped if existing)
+4. Deploy `seaweedfs-net` network, `seaweedfs.service`, and `caddy.service`
+5. Print active HTTPS endpoints and credential summary
+
+## Updating the Installation
+
+To update unit files, scripts, or Caddy configuration without losing secrets, storage data, or local CA certificates:
+
+```bash
+sudo ./install.sh --update
+```
+
+## HTTPS & Caddy Setup
+
+Caddy serves reverse-proxied HTTPS endpoints using automatically generated local CA certificates (`tls internal`):
+
+- **S3 Endpoint & Buckets**: `https://s3.example.com` and wildcard buckets like `https://rancher-backup.s3.example.com`
+- **Admin UI**: `https://admin.example.com`
+- **Filer UI**: `https://filer.example.com`
+- **Master UI**: `https://master.example.com`
+
+### Trusting Caddy's Local Root CA
+
+Clients connecting to HTTPS can trust Caddy's local root CA certificate found on the host at:
+`/srv/caddy/data/caddy/pki/authorities/local/root.crt`
+
+*(Alternatively, S3 clients on internal networks can be configured to disable TLS verification).*
 
 ## Ports
 
-| Port  | Service         |
-|-------|-----------------|
-| 8333  | S3 API          |
-| 9333  | Master UI       |
-| 9340  | Volume server (gRPC/HTTP, not a UI) |
-| 8888  | Filer UI        |
-| 7333  | WebDAV          |
-| 23646 | Admin UI        |
-
-All six are published directly on the host — nothing sits behind a proxy in
-this setup. If this box is reachable beyond your own machine, treat those
-ports as you would any other admin surface (firewall rules, VPN-only access,
-etc.).
+| Port  | Service                        | Access |
+|-------|--------------------------------|--------|
+| 80    | HTTP (redirects to HTTPS)      | Caddy  |
+| 443   | HTTPS Reverse Proxy            | Caddy  |
+| 8333  | S3 API (Direct HTTP fallback)  | Direct |
+| 9333  | Master UI (Direct HTTP)        | Direct |
+| 9340  | Volume server (gRPC/HTTP)      | Direct |
+| 8888  | Filer UI (Direct HTTP)         | Direct |
+| 7333  | WebDAV (Direct HTTP)           | Direct |
+| 23646 | Admin UI (Direct HTTP)         | Direct |
 
 ## Credentials
 
-Admin UI and S3 access/secret keys are generated as random strings during
-`install.sh` and stored as **Podman secrets**, not as plaintext in the
-quadlet file (which lives in `/etc` and is typically world-readable).
+Admin UI and S3 access/secret keys are generated as random strings during `install.sh` and stored as **Podman secrets**.
 
 Retrieve them any time:
 
@@ -69,13 +88,6 @@ On **Podman < 4.2** (e.g. Podman 3.4):
 ```bash
 sudo jq -r 'to_entries[] | "\(.key): \(.value | @base64d)"' /var/lib/containers/storage/secrets/filedriver/secretsdata.json
 ```
-or map names to values:
-```bash
-sudo bash -c 'podman secret ls --format "{{.ID}} {{.Name}}" | while read -r id name; do
-  val=$(jq -r --arg id "$id" ".[\$id] // empty | @base64d" /var/lib/containers/storage/secrets/filedriver/secretsdata.json)
-  printf "%-22s: %s\n" "$name" "$val"
-done'
-```
 
 To rotate credentials automatically:
 
@@ -85,44 +97,29 @@ sudo ./rotate-credentials.sh --admin-pass  # rotates only Admin UI password
 sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
 ```
 
-## Data persistence
+## Data Persistence & Certificate Retention
 
-Container data lives in `/data` inside the container, bind-mounted from
-`/srv/seaweedfs/data` on the host. This covers master metadata, volume
-files, and filer metadata — all in one directory.
-
-Back this directory up like any other stateful service data. There's no
-snapshotting or replication configured here — this is a single-node setup.
+- **Storage Data**: `/srv/seaweedfs/data`
+- **Caddy Config & Root CA**: `/srv/caddy`
 
 ## Operations
 
 ```bash
-systemctl status seaweedfs.service
+systemctl status seaweedfs.service caddy.service
 journalctl -u seaweedfs.service -f
-sudo systemctl restart seaweedfs.service
-sudo systemctl stop seaweedfs.service
+journalctl -u caddy.service -f
+sudo systemctl restart seaweedfs.service caddy.service
 ```
-
-After editing `seaweedfs.container`, always:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart seaweedfs.service
-```
-
-(Quadlet regenerates the actual systemd unit from the `.container` file at
-`daemon-reload` time — restarting without reloading first will silently use
-the stale config.)
 
 ## Uninstallation
 
-To remove the service, Podman secrets, and Quadlet file while preserving `/srv/seaweedfs/data` (prompts for confirmation):
+To remove the services while **PRESERVING** secrets, storage data, and Caddy root CA certs:
 
 ```bash
 sudo ./uninstall.sh
 ```
 
-To remove everything including **PERMANENTLY DELETING ALL PERSISTENT DATA** in `/srv/seaweedfs` (requires typing `YES` to confirm):
+To remove everything including **PERMANENTLY DELETING ALL PERSISTENT DATA, SECRETS, AND CADDY ROOT CA**:
 
 ```bash
 sudo ./uninstall.sh --purge
@@ -133,15 +130,3 @@ For non-interactive or automated scripts, pass `-y` / `--yes` to skip prompts:
 ```bash
 sudo ./uninstall.sh --purge -y
 ```
-
-## Known gaps / next steps
-
-- **No TLS / reverse proxy** — everything is plain HTTP on the published
-  ports. A Caddy (or nginx) front end was scoped out for now; revisit before
-  this touches anything customer-facing.
-- **Runs as root** — this uses the system-level (root) quadlet path. A
-  rootless variant (running as a dedicated non-root user) was also scoped
-  out for now; revisit if this needs to run with least privilege.
-- **Single node** — no replication/erasure coding configured; fine for a
-  lab/dev box, not for anything you can't afford to lose.
-- **Image pinning** — `seaweedfs.container` pins to `chrislusf/seaweedfs:4.41`. Update this tag when upgrading SeaweedFS versions.

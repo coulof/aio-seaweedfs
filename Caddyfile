@@ -1,0 +1,23 @@
+{
+    local_certs
+}
+
+*.s3.example.com, s3.example.com {
+    tls internal
+    reverse_proxy seaweedfs:8333
+}
+
+admin.example.com {
+    tls internal
+    reverse_proxy seaweedfs:23646
+}
+
+filer.example.com {
+    tls internal
+    reverse_proxy seaweedfs:8888
+}
+
+master.example.com {
+    tls internal
+    reverse_proxy seaweedfs:9333
+}

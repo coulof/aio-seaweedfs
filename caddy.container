@@ -1,0 +1,27 @@
+[Unit]
+Description=Caddy HTTPS Reverse Proxy for SeaweedFS
+Documentation=https://caddyserver.com/docs/
+After=seaweedfs.service
+Wants=seaweedfs.service
+
+[Container]
+Image=docker.io/library/caddy:2
+ContainerName=caddy
+AutoUpdate=registry
+
+Network=seaweedfs-net.network
+
+Volume=/srv/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+Volume=/srv/caddy/data:/data:Z
+Volume=/srv/caddy/config:/config:Z
+
+PublishPort=80:80
+PublishPort=443:443
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -1,16 +1,32 @@
 #!/bin/bash
-# install.sh — sets up SeaweedFS as a boot-persistent systemd service via Podman
+# install.sh — sets up SeaweedFS and Caddy HTTPS reverse proxy via Podman & systemd
 #
-# Usage: sudo ./install.sh
+# Usage:
+#   sudo ./install.sh          # Fresh installation / idempotent rerun
+#   sudo ./install.sh --update # Update unit files, Caddyfile, and restart services without touch secrets
 #
-# Supports both Podman Quadlet (Podman >= 4.4.0) and standard systemd unit file (Podman 3.x / < 4.4.0).
-# Idempotent: safe to re-run. Existing secrets are left untouched.
+# Supports both Podman Quadlet (Podman >= 4.4.0) and standard systemd unit files (Podman 3.x / < 4.4.0).
 
 set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then
   echo "Please run as root: sudo ./install.sh" >&2
   exit 1
+fi
+
+IS_UPDATE=false
+for arg in "$@"; do
+  case "$arg" in
+    --update|--upgrade)
+      IS_UPDATE=true
+      ;;
+  esac
+done
+
+if [[ "${IS_UPDATE}" == "true" ]]; then
+  echo "==> Running in UPDATE mode (refreshing files and restarting services)"
+else
+  echo "==> Running in INSTALL mode"
 fi
 
 echo "==> Checking system prerequisites"
@@ -47,16 +63,26 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="/srv/seaweedfs/data"
+CADDY_DIR="/srv/caddy"
+CADDY_DATA_DIR="/srv/caddy/data"
+CADDY_CONFIG_DIR="/srv/caddy/config"
 ENTRYPOINT_DEST="/srv/seaweedfs/entrypoint.sh"
 QUADLET_DIR="/etc/containers/systemd"
 SYSTEMD_DIR="/etc/systemd/system"
 
-echo "==> Creating data directory: ${DATA_DIR}"
-mkdir -p "${DATA_DIR}"
+echo "==> Creating directories"
+mkdir -p "${DATA_DIR}" "${CADDY_DIR}" "${CADDY_DATA_DIR}" "${CADDY_CONFIG_DIR}"
 chown 1000:1000 "${DATA_DIR}"   # seaweedfs container runs as uid 1000 by default
 
 echo "==> Installing entrypoint script to ${ENTRYPOINT_DEST}"
 install -m 0755 "${SCRIPT_DIR}/entrypoint.sh" "${ENTRYPOINT_DEST}"
+
+echo "==> Installing Caddyfile to ${CADDY_DIR}/Caddyfile"
+if [[ ! -f "${CADDY_DIR}/Caddyfile" ]] || [[ "${IS_UPDATE}" == "true" ]]; then
+  install -m 0644 "${SCRIPT_DIR}/Caddyfile" "${CADDY_DIR}/Caddyfile"
+else
+  echo "    - ${CADDY_DIR}/Caddyfile already exists, leaving as-is (pass --update to overwrite)"
+fi
 
 echo "==> Creating Podman secrets (skipped if they already exist)"
 create_secret_if_missing() {
@@ -75,31 +101,38 @@ create_secret_if_missing "seaweedfs-s3-key" "admin"
 create_secret_if_missing "seaweedfs-s3-secret" "$(openssl rand -base64 32)"
 
 if [[ "${USE_QUADLET}" == "true" ]]; then
-  echo "==> Installing quadlet unit to ${QUADLET_DIR}"
+  echo "==> Installing Quadlet units to ${QUADLET_DIR}"
   mkdir -p "${QUADLET_DIR}"
+  install -m 0644 "${SCRIPT_DIR}/seaweedfs-net.network" "${QUADLET_DIR}/seaweedfs-net.network"
   install -m 0644 "${SCRIPT_DIR}/seaweedfs.container" "${QUADLET_DIR}/seaweedfs.container"
+  install -m 0644 "${SCRIPT_DIR}/caddy.container" "${QUADLET_DIR}/caddy.container"
 
-  echo "==> Reloading systemd and starting seaweedfs.service"
+  echo "==> Reloading systemd and restarting services"
   systemctl daemon-reload
-
-  if ! systemctl list-unit-files seaweedfs.service >/dev/null 2>&1 && ! systemctl status seaweedfs.service >/dev/null 2>&1; then
-    echo "Error: systemd generator failed to create 'seaweedfs.service' from '${QUADLET_DIR}/seaweedfs.container'." >&2
-    exit 1
-  fi
 
   systemctl restart seaweedfs.service
+  systemctl restart caddy.service
 else
-  echo "==> Installing standard systemd unit to ${SYSTEMD_DIR}"
-  install -m 0644 "${SCRIPT_DIR}/seaweedfs.service" "${SYSTEMD_DIR}/seaweedfs.service"
+  echo "==> Ensuring Podman network seaweedfs-net exists"
+  if ! podman network exists seaweedfs-net 2>/dev/null; then
+    podman network create seaweedfs-net >/dev/null
+    echo "    - Created network seaweedfs-net"
+  fi
 
-  echo "==> Reloading systemd and enabling seaweedfs.service"
+  echo "==> Installing standard systemd units to ${SYSTEMD_DIR}"
+  install -m 0644 "${SCRIPT_DIR}/seaweedfs.service" "${SYSTEMD_DIR}/seaweedfs.service"
+  install -m 0644 "${SCRIPT_DIR}/caddy.service" "${SYSTEMD_DIR}/caddy.service"
+
+  echo "==> Reloading systemd and enabling services"
   systemctl daemon-reload
   systemctl enable --now seaweedfs.service
+  systemctl enable --now caddy.service
 fi
 
 echo ""
 echo "==> Done. Service status:"
 systemctl status seaweedfs.service --no-pager || true
+systemctl status caddy.service --no-pager || true
 
 get_secret_val() {
   local name="$1"
@@ -129,9 +162,15 @@ get_secret_val() {
   fi
 }
 
+CA_ROOT_PATH="/srv/caddy/data/caddy/pki/authorities/local/root.crt"
+
 echo ""
 echo "========================================================================="
-echo "                  SeaweedFS Installation Complete"
+if [[ "${IS_UPDATE}" == "true" ]]; then
+  echo "                  SeaweedFS & Caddy Update Complete"
+else
+  echo "                  SeaweedFS & Caddy Installation Complete"
+fi
 echo "========================================================================="
 echo " Save these credentials somewhere safe (e.g. in your password manager):"
 echo ""
@@ -140,10 +179,16 @@ echo "    Admin UI Password: $(get_secret_val "seaweedfs-admin-pass")"
 echo "    S3 Access Key:     $(get_secret_val "seaweedfs-s3-key")"
 echo "    S3 Secret Key:     $(get_secret_val "seaweedfs-s3-secret")"
 echo ""
-echo " Active Endpoints:"
-echo "    Master UI:         http://localhost:9333"
-echo "    Admin UI:          http://localhost:23646"
+echo " Active HTTPS Endpoints (via Caddy Reverse Proxy):"
+echo "    S3 API & Buckets:  https://s3.example.com (and *.s3.example.com)"
+echo "    Admin UI:          https://admin.example.com"
+echo "    Filer UI:          https://filer.example.com"
+echo "    Master UI:         https://master.example.com"
+echo ""
+echo " Direct HTTP Fallback Endpoints:"
 echo "    S3 API:            http://localhost:8333"
-echo "    Filer UI:          http://localhost:8888"
-echo "    WebDAV:            http://localhost:7333"
+echo "    Admin UI:          http://localhost:23646"
+echo ""
+echo " Caddy Local Root CA Certificate (install on clients if trusting HTTPS):"
+echo "    Path: ${CA_ROOT_PATH}"
 echo "========================================================================="
