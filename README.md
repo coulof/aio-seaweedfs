@@ -133,3 +133,8 @@ For non-interactive or automated scripts, pass `-y` / `--yes` to skip prompts:
 ```bash
 sudo ./uninstall.sh --purge -y
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
