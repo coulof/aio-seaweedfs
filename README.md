@@ -3,6 +3,56 @@
 Boot-persistent SeaweedFS deployment (S3 API, Master, Volume, Filer, WebDAV,
 Admin UI) with a Caddy HTTPS reverse proxy running as root-managed Podman services.
 
+## Architecture
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#eaf7f1',
+    'primaryTextColor': '#0c322c',
+    'primaryBorderColor': '#30ba78',
+    'lineColor': '#0c322c',
+    'clusterBkg': '#f9fbfa',
+    'clusterBorder': '#30ba78'
+  }
+}}%%
+flowchart TD
+    classDef purpleRole fill:#5d4f99,stroke:#0c322c,stroke-width:1px,color:#ffffff
+    classDef yellowRole fill:#fcb244,stroke:#0c322c,stroke-width:1px,color:#0c322c
+    classDef greenRole fill:#30ba78,stroke:#0c322c,stroke-width:1px,color:#ffffff
+    classDef darkRole fill:#0c322c,stroke:#30ba78,stroke-width:1.5px,color:#ffffff
+
+    subgraph Clients["Clients"]
+        C_S3["S3 Clients / Workloads<br/><code>*.s3.&lt;domain&gt;</code>"]:::purpleRole
+        C_Web["Web Browsers / Admins<br/><code>admin.|filer.|master.&lt;domain&gt;</code>"]:::purpleRole
+    end
+
+    subgraph Host["Host (Podman + systemd)"]
+        subgraph Caddy["Caddy (HTTPS Reverse Proxy)"]
+            TLS["TLS Termination (:80 / :443)<br/>Local Root CA"]:::yellowRole
+        end
+
+        subgraph SeaweedFS["SeaweedFS (All-in-One Container)"]
+            S3["S3 API (:8333)"]:::greenRole
+            Admin["Admin UI (:23646)"]:::greenRole
+            Filer["Filer (:8888)"]:::greenRole
+            Master["Master (:9333)"]:::greenRole
+            Volume["Volume Server (:9340)"]:::greenRole
+            WebDAV["WebDAV (:7333)"]:::greenRole
+        end
+
+        Data[("/srv/seaweedfs/data<br/>(Persistent Storage)")]:::darkRole
+        Secrets["Podman Secrets<br/>(Admin & S3 Keys)"]:::darkRole
+    end
+
+    C_S3 -->|HTTPS :443| TLS
+    C_Web -->|HTTPS :443| TLS
+    TLS -->|reverse_proxy| S3 & Admin & Filer & Master
+    Secrets -.->|Inject Env Vars| SeaweedFS
+    SeaweedFS --> Data
+```
+
 ## Files
 
 | File                    | Purpose                                                          |
