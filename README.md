@@ -70,7 +70,7 @@ flowchart TD
 | `uninstall.sh`          | Cleanup script (retains data/secrets/CA unless `--purge` used)   |
 | `rotate-credentials.sh` | Credential rotation script                                       |
 
-## Quick start
+## Quick Start
 
 ```bash
 git clone <this-repo> seaweedfs-setup
@@ -79,55 +79,43 @@ sudo ./install.sh
 ```
 
 `install.sh` will:
-1. Create `/srv/seaweedfs/data` and `/srv/caddy`
+1. Create persistent storage directories:
+   - `/srv/seaweedfs/data` (Volumes and metadata)
+   - `/srv/caddy` (Caddy config, PKI & local CA certificates)
 2. Install `entrypoint.sh` and `Caddyfile`
-3. Generate Podman secrets for admin UI and S3 credentials (skipped if existing)
-4. Deploy `seaweedfs-net` network, `seaweedfs.service`, and `caddy.service`
-5. Print active HTTPS endpoints and credential summary
+3. Generate random Podman secrets for admin UI and S3 credentials (skipped if already existing)
+4. Deploy container services (`seaweedfs.service`, `caddy.service`)
+5. Print a deployment summary with active endpoints and credentials
 
-## Updating the Installation
+## HTTPS Endpoints & DNS Configuration
 
-To update unit files, scripts, or Caddy configuration without losing secrets, storage data, or local CA certificates:
-
-```bash
-sudo ./install.sh --update
-```
-
-## HTTPS & Caddy Setup
-
-Caddy serves reverse-proxied HTTPS endpoints using automatically generated local CA certificates (`tls internal`):
-
-- **S3 Endpoint & Buckets**: `https://s3.eati-hv-bk-sv.ati.gov.et` and wildcard buckets like `https://rancher-backup.s3.eati-hv-bk-sv.ati.gov.et`
-- **Admin UI**: `https://admin.eati-hv-bk-sv.ati.gov.et`
-- **Filer UI**: `https://filer.eati-hv-bk-sv.ati.gov.et`
-- **Master UI**: `https://master.eati-hv-bk-sv.ati.gov.et`
-
-### Trusting Caddy's Local Root CA
-
-Clients connecting to HTTPS can trust Caddy's local root CA certificate found on the host at:
-`/srv/caddy/data/caddy/pki/authorities/local/root.crt`
-
-*(Alternatively, S3 clients on internal networks can be configured to disable TLS verification).*
-
-## DNS Configuration & Custom Domain
+Caddy automatically manages internal TLS certificates (`tls internal`) for all web and S3 endpoints.
 
 ### Required DNS Records
 
-Point the following DNS records to your host server IP address:
+Point the following records to your host server's IP address:
 
-| Record Type | Host / Name | Target | Purpose |
-|-------------|-------------|--------|---------|
-| `A` / `CNAME` | `s3.<domain>` | `<Host IP>` | Primary S3 API endpoint |
-| `A` / `CNAME` | `*.s3.<domain>` | `<Host IP>` | **Wildcard S3 bucket routing** (e.g. `rancher-backup.s3.<domain>`) |
-| `A` / `CNAME` | `admin.<domain>` | `<Host IP>` | SeaweedFS Admin Web UI |
-| `A` / `CNAME` | `filer.<domain>` | `<Host IP>` | SeaweedFS Filer file browser |
-| `A` / `CNAME` | `master.<domain>` | `<Host IP>` | SeaweedFS Master cluster UI |
+| Record Type | Host / Subdomain | Backend Target | Purpose |
+|-------------|------------------|----------------|---------|
+| `A` / `CNAME` | `s3.<domain>` | `localhost:8333` | S3 API endpoint |
+| `A` / `CNAME` | `*.s3.<domain>` | `localhost:8333` | **Wildcard bucket routing** (e.g. `rancher-backup.s3.<domain>`) |
+| `A` / `CNAME` | `admin.<domain>` | `localhost:23646` | SeaweedFS Admin Web UI |
+| `A` / `CNAME` | `filer.<domain>` | `localhost:8888` | Filer Web UI / Browser |
+| `A` / `CNAME` | `master.<domain>` | `localhost:9333` | Master Cluster UI |
 
-> **Tip**: A single wildcard record `*.<domain>` pointing to your host IP covers all endpoints and dynamic buckets automatically.
+> **Tip**: A single wildcard DNS entry `*.<domain>` pointing to the host IP will cover all endpoints and dynamic buckets.
+
+### Trusting Caddy's Local Root CA
+
+Clients connecting via HTTPS can trust Caddy's auto-generated local root CA certificate:
+```text
+/srv/caddy/data/caddy/pki/authorities/local/root.crt
+```
+*(Alternatively, S3 clients on internal networks can be configured to disable TLS verification).*
 
 ### Local Testing (`/etc/hosts`)
 
-For local development or testing without a dedicated DNS server, add the entries to your client machine's `/etc/hosts`:
+For testing without a dedicated DNS server, map your host IP on the client machine:
 
 ```text
 <HOST_IP>  s3.eati-hv-bk-sv.ati.gov.et rancher-backup.s3.eati-hv-bk-sv.ati.gov.et admin.eati-hv-bk-sv.ati.gov.et filer.eati-hv-bk-sv.ati.gov.et master.eati-hv-bk-sv.ati.gov.et
@@ -137,94 +125,41 @@ For local development or testing without a dedicated DNS server, add the entries
 
 To deploy with a different base domain (e.g. `storage.example.com`):
 
-1. **Update `Caddyfile`**:
-   ```caddyfile
-   *.s3.storage.example.com, s3.storage.example.com {
-       tls internal
-       reverse_proxy 127.0.0.1:8333
-   }
-   admin.storage.example.com {
-       tls internal
-       reverse_proxy 127.0.0.1:23646
-   }
-   filer.storage.example.com {
-       tls internal
-       reverse_proxy 127.0.0.1:8888
-   }
-   master.storage.example.com {
-       tls internal
-       reverse_proxy 127.0.0.1:9333
-   }
-   ```
-
-2. **Update Unit Files**:
-   In `seaweedfs.container` (and `seaweedfs.service` if using legacy systemd):
-   ```ini
-   Environment=S3_DOMAIN_NAME=s3.storage.example.com
-   ```
-
-3. **Update Helper Scripts**:
-   In `get-info.sh` and `test-s3.sh`:
-   ```bash
-   DOMAIN="storage.example.com"
-   ```
-
-4. **Apply Changes**:
+1. **Update `Caddyfile`** with your new domain.
+2. **Update `Environment=S3_DOMAIN_NAME=s3.storage.example.com`** in `seaweedfs.container` (and `seaweedfs.service` if using legacy systemd).
+3. **Update `DOMAIN="storage.example.com"`** in `get-info.sh` and `test-s3.sh`.
+4. **Apply changes**:
    ```bash
    sudo ./install.sh --update
    ```
-   Caddy will automatically issue new internal certificates for the updated domain names on startup.
 
 ## Ports
 
-| Port  | Service                        | Access |
-|-------|--------------------------------|--------|
-| 80    | HTTP (redirects to HTTPS)      | Caddy  |
-| 443   | HTTPS Reverse Proxy            | Caddy  |
-| 8333  | S3 API (Direct HTTP fallback)  | Direct |
-| 9333  | Master UI (Direct HTTP)        | Direct |
-| 9340  | Volume server (gRPC/HTTP)      | Direct |
-| 8888  | Filer UI (Direct HTTP)         | Direct |
-| 7333  | WebDAV (Direct HTTP)           | Direct |
-| 23646 | Admin UI (Direct HTTP)         | Direct |
+| Port  | Service                        | Access | Description |
+|-------|--------------------------------|--------|-------------|
+| 80    | HTTP                           | Caddy  | Automatically redirects to HTTPS |
+| 443   | HTTPS                          | Caddy  | Reverse proxy entrypoint for all services |
+| 8333  | S3 API                         | Direct | Direct HTTP fallback |
+| 9333  | Master UI                      | Direct | Master status and topology |
+| 9340  | Volume Server                  | Direct | Internal volume gRPC/HTTP |
+| 8888  | Filer UI                       | Direct | File hierarchy browser |
+| 7333  | WebDAV                         | Direct | WebDAV interface |
+| 23646 | Admin UI                       | Direct | SeaweedFS administration console |
 
-## Credentials
+## Credentials & Secrets
 
-Admin UI and S3 access/secret keys are generated as random strings during `install.sh` and stored as **Podman secrets**.
+Admin credentials and S3 access/secret keys are generated as random strings and stored as **Podman secrets** (`seaweedfs-admin-user`, `seaweedfs-admin-pass`, `seaweedfs-s3-key`, `seaweedfs-s3-secret`).
 
-Retrieve them any time:
-
-On **Podman >= 4.2**:
+To view current credentials at any time:
 ```bash
-sudo podman secret inspect seaweedfs-admin-user --showsecret
-sudo podman secret inspect seaweedfs-admin-pass --showsecret
-sudo podman secret inspect seaweedfs-s3-key --showsecret
-sudo podman secret inspect seaweedfs-s3-secret --showsecret
+sudo ./get-info.sh
 ```
 
-On **Podman < 4.2** (e.g. Podman 3.4):
-```bash
-sudo jq -r 'to_entries[] | "\(.key): \(.value | @base64d)"' /var/lib/containers/storage/secrets/filedriver/secretsdata.json
-```
+*(You can also inspect individual secrets on Podman 4.2+ using `sudo podman secret inspect <name> --showsecret`).*
 
-To rotate credentials automatically:
+## Operations & Maintenance
 
-```bash
-sudo ./rotate-credentials.sh             # rotates all generated credentials
-sudo ./rotate-credentials.sh --admin-pass  # rotates only Admin UI password
-sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
-```
-
-## Data Persistence & Certificate Retention
-
-- **Storage Data**: `/srv/seaweedfs/data`
-- **Caddy Config & Root CA**: `/srv/caddy`
-
-## Operations
-
-### Deployment Summary & Info
-
-Display all active URLs, endpoints, secrets, service statuses, and CA paths:
+### Deployment Status & Secrets Summary
 
 ```bash
 sudo ./get-info.sh
@@ -232,72 +167,69 @@ sudo ./get-info.sh
 
 ### Service Management & Logs
 
-Check status, view live logs, or restart services:
-
 ```bash
 # Service status
 systemctl status seaweedfs.service caddy.service
 
-# Live log streaming
+# Live logs
 journalctl -u seaweedfs.service -u caddy.service -f
 
 # Restart services
 sudo systemctl restart seaweedfs.service caddy.service
 ```
 
-### End-to-End Testing
+### Credential Rotation
 
-Run automated AWS Signature v4 S3 operations test (creates a bucket, uploads a test file, verifies MD5 checksum, and cleans up):
+Rotate generated passwords or S3 access keys without data loss:
 
 ```bash
-sudo ./test-s3.sh
+sudo ./rotate-credentials.sh             # Rotates all credentials
+sudo ./rotate-credentials.sh --admin-pass  # Rotates only Admin UI password
+sudo ./rotate-credentials.sh --s3-secret   # Rotates only S3 secret key
 ```
 
-Check SeaweedFS master cluster status directly:
+### Automated Testing & Health Checks
 
 ```bash
+# Automated S3 AWS SigV4 end-to-end sanity check
+sudo ./test-s3.sh
+
+# Cluster master health endpoint
 curl -fsSL http://localhost:9333/cluster/status | jq .
 ```
 
-### Firewall Configuration
+### Updating Configuration & Units
 
-Configure UFW firewall rules to allow external HTTPS (`443`) and HTTP (`80`) while keeping internal ports protected:
+To apply changes to scripts, units, or Caddy configuration without losing secrets, stored data, or certificates:
+
+```bash
+sudo ./install.sh --update
+```
+
+### Firewall Configuration (UFW)
+
+Restricts external traffic to HTTPS (`443`) and HTTP (`80`) while keeping internal ports protected:
 
 ```bash
 sudo ./setup-ufw.sh
 ```
 
-### Credential Rotation
-
-Rotate generated admin passwords or S3 access keys at any time without data loss:
-
-```bash
-sudo ./rotate-credentials.sh             # rotates all credentials
-sudo ./rotate-credentials.sh --admin-pass  # rotates only Admin UI password
-sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
-```
-
 ## Uninstallation
 
-To remove the services while **PRESERVING** secrets, storage data, and Caddy root CA certs:
+To remove the containers and systemd services while **PRESERVING** storage data, secrets, and Caddy root CA certs:
 
 ```bash
 sudo ./uninstall.sh
 ```
 
-To remove everything including **PERMANENTLY DELETING ALL PERSISTENT DATA, SECRETS, AND CADDY ROOT CA**:
+To perform a complete removal, **PERMANENTLY PURGING ALL DATA, SECRETS, AND ROOT CA CERTS**:
 
 ```bash
 sudo ./uninstall.sh --purge
 ```
 
-For non-interactive or automated scripts, pass `-y` / `--yes` to skip prompts:
-
-```bash
-sudo ./uninstall.sh --purge -y
-```
+*(Pass `-y` / `--yes` for non-interactive scripts).*
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
