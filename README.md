@@ -109,6 +109,72 @@ Clients connecting to HTTPS can trust Caddy's local root CA certificate found on
 
 *(Alternatively, S3 clients on internal networks can be configured to disable TLS verification).*
 
+## DNS Configuration & Custom Domain
+
+### Required DNS Records
+
+Point the following DNS records to your host server IP address:
+
+| Record Type | Host / Name | Target | Purpose |
+|-------------|-------------|--------|---------|
+| `A` / `CNAME` | `s3.<domain>` | `<Host IP>` | Primary S3 API endpoint |
+| `A` / `CNAME` | `*.s3.<domain>` | `<Host IP>` | **Wildcard S3 bucket routing** (e.g. `rancher-backup.s3.<domain>`) |
+| `A` / `CNAME` | `admin.<domain>` | `<Host IP>` | SeaweedFS Admin Web UI |
+| `A` / `CNAME` | `filer.<domain>` | `<Host IP>` | SeaweedFS Filer file browser |
+| `A` / `CNAME` | `master.<domain>` | `<Host IP>` | SeaweedFS Master cluster UI |
+
+> **Tip**: A single wildcard record `*.<domain>` pointing to your host IP covers all endpoints and dynamic buckets automatically.
+
+### Local Testing (`/etc/hosts`)
+
+For local development or testing without a dedicated DNS server, add the entries to your client machine's `/etc/hosts`:
+
+```text
+<HOST_IP>  s3.eati-hv-bk-sv.ati.gov.et rancher-backup.s3.eati-hv-bk-sv.ati.gov.et admin.eati-hv-bk-sv.ati.gov.et filer.eati-hv-bk-sv.ati.gov.et master.eati-hv-bk-sv.ati.gov.et
+```
+
+### Changing the Domain Name
+
+To deploy with a different base domain (e.g. `storage.example.com`):
+
+1. **Update `Caddyfile`**:
+   ```caddyfile
+   *.s3.storage.example.com, s3.storage.example.com {
+       tls internal
+       reverse_proxy 127.0.0.1:8333
+   }
+   admin.storage.example.com {
+       tls internal
+       reverse_proxy 127.0.0.1:23646
+   }
+   filer.storage.example.com {
+       tls internal
+       reverse_proxy 127.0.0.1:8888
+   }
+   master.storage.example.com {
+       tls internal
+       reverse_proxy 127.0.0.1:9333
+   }
+   ```
+
+2. **Update Unit Files**:
+   In `seaweedfs.container` (and `seaweedfs.service` if using legacy systemd):
+   ```ini
+   Environment=S3_DOMAIN_NAME=s3.storage.example.com
+   ```
+
+3. **Update Helper Scripts**:
+   In `get-info.sh` and `test-s3.sh`:
+   ```bash
+   DOMAIN="storage.example.com"
+   ```
+
+4. **Apply Changes**:
+   ```bash
+   sudo ./install.sh --update
+   ```
+   Caddy will automatically issue new internal certificates for the updated domain names on startup.
+
 ## Ports
 
 | Port  | Service                        | Access |
@@ -156,12 +222,59 @@ sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
 
 ## Operations
 
+### Deployment Summary & Info
+
+Display all active URLs, endpoints, secrets, service statuses, and CA paths:
+
 ```bash
-sudo ./get-info.sh                          # Displays all URLs, ports, service status, & secrets
+sudo ./get-info.sh
+```
+
+### Service Management & Logs
+
+Check status, view live logs, or restart services:
+
+```bash
+# Service status
 systemctl status seaweedfs.service caddy.service
-journalctl -u seaweedfs.service -f
-journalctl -u caddy.service -f
+
+# Live log streaming
+journalctl -u seaweedfs.service -u caddy.service -f
+
+# Restart services
 sudo systemctl restart seaweedfs.service caddy.service
+```
+
+### End-to-End Testing
+
+Run automated AWS Signature v4 S3 operations test (creates a bucket, uploads a test file, verifies MD5 checksum, and cleans up):
+
+```bash
+sudo ./test-s3.sh
+```
+
+Check SeaweedFS master cluster status directly:
+
+```bash
+curl -fsSL http://localhost:9333/cluster/status | jq .
+```
+
+### Firewall Configuration
+
+Configure UFW firewall rules to allow external HTTPS (`443`) and HTTP (`80`) while keeping internal ports protected:
+
+```bash
+sudo ./setup-ufw.sh
+```
+
+### Credential Rotation
+
+Rotate generated admin passwords or S3 access keys at any time without data loss:
+
+```bash
+sudo ./rotate-credentials.sh             # rotates all credentials
+sudo ./rotate-credentials.sh --admin-pass  # rotates only Admin UI password
+sudo ./rotate-credentials.sh --s3-secret   # rotates only S3 secret key
 ```
 
 ## Uninstallation
